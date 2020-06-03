@@ -45,7 +45,8 @@ class Shor(QuantumAlgorithm):
     def __init__(self,
                  N: int = 15,
                  a: int = 2,
-                 quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None) -> None:
+                 quantum_instance: Optional[Union[QuantumInstance, BaseBackend]] = None,
+                 job_id = None) -> None:
         """
         Args:
             N: The integer to be factored, has a min. value of 3.
@@ -58,6 +59,7 @@ class Shor(QuantumAlgorithm):
         validate_min('N', N, 3)
         validate_min('a', a, 2)
         super().__init__(quantum_instance)
+        self.job_id = job_id
         self._n = None
         self._up_qreg = None
         self._down_qreg = None
@@ -440,26 +442,12 @@ class Shor(QuantumAlgorithm):
         if not self._ret['factors']:
             logger.debug('Running with N=%s and a=%s.', self._N, self._a)
 
-            if False:# self._quantum_instance.is_statevector:
-                circuit = self.construct_circuit(measurement=False)
-                logger.warning('The statevector_simulator might lead to '
-                               'subsequent computation using too much memory.')
-                result = self._quantum_instance.execute(circuit)
-                complete_state_vec = result.get_statevector(circuit)
-                # TODO: this uses too much memory
-                up_qreg_density_mat = get_subsystem_density_matrix(
-                    complete_state_vec,
-                    range(2 * self._n, 4 * self._n + 2)
-                )
-                up_qreg_density_mat_diag = np.diag(up_qreg_density_mat)
-
-                counts = dict()
-                for i, v in enumerate(up_qreg_density_mat_diag):
-                    if not v == 0:
-                        counts[bin(int(i))[2:].zfill(2 * self._n)] = v ** 2
-            else:
-                circuit = self.construct_circuit(measurement=True)
+            assert not self._quantum_instance.is_statevector
+            circuit = self.construct_circuit(measurement=True)
+            if (self.job_id is None) or ("retrieve_job" not in dir(self._quantum_instance._backend)):
                 counts = self._quantum_instance.execute(circuit).get_counts(circuit)
+            else:
+                counts = self._quantum_instance._backend.retrieve_job(self.job_id).result().get_counts(circuit)
 
             self._ret['results'] = dict()
 
